@@ -537,6 +537,8 @@ declare module "react-native-firebase" {
          * credential requires the following properties:
          */
         signInWithCredential(credential: Credential): Promise<User>
+        verifyPhoneNumber(phoneNumber: string): Promise<string>
+        signInWithPhone(verificationId: string, verificationCode: string): Promise<User>
         /**
          * Sign a user in with a self-signed JWT token.
          * To sign a user using a self-signed custom token,
