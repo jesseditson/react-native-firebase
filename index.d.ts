@@ -511,6 +511,10 @@ declare module "react-native-firebase" {
          */
         currentUser: User | null
         /**
+         * - The user's phone number (if available)
+         */
+        phoneNumber: string | null
+        /**
          * Listen for changes in the users auth state (logging in and out).
          * This method returns a unsubscribe function to stop listening to events.
          * Always ensure you unsubscribe from the listener when no longer needed to prevent updates to components no longer in use.
@@ -537,7 +541,13 @@ declare module "react-native-firebase" {
          * credential requires the following properties:
          */
         signInWithCredential(credential: Credential): Promise<User>
+        /**
+         * Send a verification code to the specified phone number. To be used with signInWithPhone when complete.
+         */
         verifyPhoneNumber(phoneNumber: string): Promise<string>
+        /**
+         * Verify a phone number using an ID and code, returned from verifyPhoneNumber.
+         */
         signInWithPhone(verificationId: string, verificationCode: string): Promise<User>
         /**
          * Sign a user in with a self-signed JWT token.
