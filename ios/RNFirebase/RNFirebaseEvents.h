@@ -4,6 +4,7 @@
 #import <Foundation/Foundation.h>
 
 static NSString *const AUTH_CHANGED_EVENT = @"onAuthStateChanged";
+static NSString *const AUTH_CODE_SENT_EVENT = @"onAuthCodeSent";
 static NSString *const AUTH_ERROR_EVENT = @"authError";
 static NSString *const AUTH_ANONYMOUS_ERROR_EVENT = @"authAnonymousError";
 

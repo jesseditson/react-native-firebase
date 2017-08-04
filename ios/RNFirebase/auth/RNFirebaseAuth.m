@@ -3,6 +3,11 @@
 
 
 #if __has_include(<FirebaseAuth/FIRAuth.h>)
+
+@interface RNFirebaseAuth()
+  @property (nonatomic, strong) NSMutableDictionary *verificationIDHandlers;
+@end
+
 @implementation RNFirebaseAuth
 RCT_EXPORT_MODULE();
 
@@ -11,7 +16,7 @@ RCT_EXPORT_MODULE();
 
  */
 RCT_EXPORT_METHOD(addAuthStateListener) {
-    self->listening = true;
+    self->authStateListening = true;
     self->authListenerHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *_Nonnull auth, FIRUser *_Nullable user) {
         if (user != nil) {
             [self sendJSEvent:AUTH_CHANGED_EVENT props: @{ @"authenticated": @(true),@"user": [self firebaseUserToDict:user] }];
@@ -28,7 +33,7 @@ RCT_EXPORT_METHOD(addAuthStateListener) {
 RCT_EXPORT_METHOD(removeAuthStateListener) {
     if (self->authListenerHandle != nil) {
         [[FIRAuth auth] removeAuthStateDidChangeListener:self->authListenerHandle];
-        self->listening = false;
+        self->authStateListening = false;
     }
 }
 
@@ -399,14 +404,14 @@ RCT_EXPORT_METHOD(checkActionCode:(NSString *) code resolver:(RCTPromiseResolveB
 }
 
 /**
- verifyPhoneNumber
+ signInWithPhoneNumber
 
  @param NSString phoneNumber
  @param RCTPromiseResolveBlock resolve
  @param RCTPromiseRejectBlock reject
  @return
  */
-RCT_EXPORT_METHOD(verifyPhoneNumber:(NSString*) phoneNumber resolver:(RCTPromiseResolveBlock) resolve rejecter:(RCTPromiseRejectBlock) reject)
+RCT_EXPORT_METHOD(signInWithPhoneNumber:(NSString*) phoneNumber resolver:(RCTPromiseResolveBlock) resolve rejecter:(RCTPromiseRejectBlock) reject)
 {
     [[FIRPhoneAuthProvider provider]
      verifyPhoneNumber: phoneNumber
@@ -415,37 +420,62 @@ RCT_EXPORT_METHOD(verifyPhoneNumber:(NSString*) phoneNumber resolver:(RCTPromise
         if (error) {
             [self promiseRejectAuthException:reject error:error];
         } else {
-            resolve(verificationID);
+            [self sendJSEvent:AUTH_CODE_SENT_EVENT props: @{ @"verificationID": verificationID }];
+            // lazily create an object with the shape:
+            // { verificationID: [ {resolve, reject} ] }
+            if (self.verificationIDHandlers == nil) {
+                self.verificationIDHandlers = [[NSMutableDictionary alloc] init];
+            }
+            NSArray *handlers = [self.verificationIDHandlers objectForKey:verificationID];
+            NSDictionary *handlerObject = @{
+                                            @"resolve": [resolve copy],
+                                            @"reject": [reject copy]
+                                            };
+            if (handlers == nil) {
+                handlers = @[handlerObject];
+            } else {
+                handlers = [handlers arrayByAddingObject:handlerObject];
+            }
+            [self.verificationIDHandlers setObject:handlers forKey:verificationID];
         }
-
     }];
 }
 
 /**
- signInWithPhone
+ verifyCode
 
- @param NSString provider
  @param NSString verificationID
  @param NSString verificationCode
- @param RCTPromiseResolveBlock resolve
- @param RCTPromiseRejectBlock reject
  @return
  */
-RCT_EXPORT_METHOD(signInWithPhone:(NSString *)verificationID verificationCode:(NSString *)verificationCode resolver:(RCTPromiseResolveBlock) resolve rejecter:(RCTPromiseRejectBlock) reject) {
+RCT_EXPORT_METHOD(verifyCode:(NSString *)verificationID verificationCode:(NSString *)verificationCode) {
+
+    // Bail early with helpful errors if auth is misconfigured
+    if (self.verificationIDHandlers == nil) {
+        @throw @"Attempted to verify a code with no registered auth listeners";
+    }
+    NSArray *waitingPromises = [self.verificationIDHandlers objectForKey:verificationID];
+    if (waitingPromises == nil) {
+        @throw @"No listeners were found for that verificationID";
+    }
 
     FIRAuthCredential *credential = [[FIRPhoneAuthProvider provider]
                                      credentialWithVerificationID:verificationID
                                      verificationCode:verificationCode];
 
     if (credential == nil) {
-        return reject(@"auth/invalid-credential", @"The supplied auth credential is malformed, has expired or is not currently supported.", nil);
+        @throw @"The supplied auth credential is malformed, has expired or is not currently supported.";
     }
 
     [[FIRAuth auth] signInWithCredential:credential completion:^(FIRUser *user, NSError *error) {
-            if (error) {
-                [self promiseRejectAuthException:reject error:error];
-            } else {
-                [self promiseWithUser:resolve rejecter:reject user:user];
+            for (NSDictionary *handler in waitingPromises) {
+                RCTPromiseResolveBlock resolve = [handler objectForKey:@"resolve"];
+                RCTPromiseRejectBlock reject = [handler objectForKey:@"reject"];
+                if (error) {
+                    [self promiseRejectAuthException:reject error:error];
+                } else {
+                    [self promiseWithUser:resolve rejecter:reject user:user];
+                }
             }
         }];
 }
@@ -807,7 +837,9 @@ RCT_EXPORT_METHOD(fetchProvidersForEmail:(NSString *)email resolver:(RCTPromiseR
  */
 - (void) sendJSEvent:(NSString *)title props:(NSDictionary *)props {
     @try {
-        if (self->listening) {
+        if (![title isEqualToString:AUTH_CHANGED_EVENT]) {
+            [self sendEventWithName:title body:props];
+        } else if (self->authStateListening) { // this is an auth changed event, only fire if listening.
             [self sendEventWithName:title body:props];
         }
     }
@@ -882,7 +914,7 @@ RCT_EXPORT_METHOD(fetchProvidersForEmail:(NSString *)email resolver:(RCTPromiseR
 }
 
 - (NSArray<NSString *> *)supportedEvents {
-    return @[AUTH_CHANGED_EVENT, AUTH_ANONYMOUS_ERROR_EVENT, AUTH_ERROR_EVENT];
+    return @[AUTH_CHANGED_EVENT, AUTH_CODE_SENT_EVENT, AUTH_ANONYMOUS_ERROR_EVENT, AUTH_ERROR_EVENT];
 }
 
 @end

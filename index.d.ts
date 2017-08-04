@@ -542,13 +542,23 @@ declare module "react-native-firebase" {
          */
         signInWithCredential(credential: Credential): Promise<User>
         /**
-         * Send a verification code to the specified phone number. To be used with signInWithPhone when complete.
+         * Send a verification code to the specified phone number.
+         * Note that to use this method, you must also handle the onAuthCodeSent callback,
+         * which will be always be invoked on iOS and sometimes be invoked on android.
          */
-        verifyPhoneNumber(phoneNumber: string): Promise<string>
+        signInWithPhoneNumber(phoneNumber: string): Promise<User>
         /**
-         * Verify a phone number using an ID and code, returned from verifyPhoneNumber.
+         * invoked when a user has been sent a code.
+         * If this event is invoked, you must call verifyCode with a user-entered code and the
+         * verificationID passed to this callback.
+         * Returns a function that will remove this listener when called.
          */
-        signInWithPhone(verificationId: string, verificationCode: string): Promise<User>
+        onAuthCodeSent(handler: (verificationID: string) => void): () => void
+        /**
+         * Verify a phone number using an ID and code. The ID comes from onAuthCodeSent,
+         * and this will only
+         */
+        verifyCode(verificationID: string, verificationCode: string): void
         /**
          * Sign a user in with a self-signed JWT token.
          * To sign a user using a self-signed custom token,

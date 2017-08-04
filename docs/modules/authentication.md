@@ -72,6 +72,38 @@ firebase.auth().signInWithEmailAndPassword('foo@bar.com', '123456')
   });
 ```
 
+#### [`signInWithPhoneNumber(phoneNumber: string): Promise`](https://firebase.google.com/docs/reference/js/firebase.auth.Auth#signInWithPhoneNumber)
+#### [`onAuthCodeSent(handler: (verificationID: string) => void): () => void`](https://firebase.google.com/docs/reference/js/firebase.auth.Auth#onAuthCodeSent)
+#### [`verifyCode(verificationID: string, verificationCode: string)`](https://firebase.google.com/docs/reference/js/firebase.auth.Auth#verifyCode)
+
+To sign a user in with their phone number, use the `signInWithPhoneNumber()` function.
+
+This method will send the user a verification code, which will either be automatically verified (some android devices), or will require the user to input the code that was sent to them.
+
+As such, you must first subscribe to the `onAuthCodeSent` event, which if called, must in turn call `firebase.auth().verifyCode()`. once verified (or rejected), the original promise will be resolved with a user or an error:
+
+```javascript
+const auth = firebase.auth();
+// install handler
+const unsubscribe = auth.onAuthCodeSent((verificationID) => {
+  // obtain code from user, probably by showing a text box or similar.
+  getCodeFromUser()
+    .then(code => auth.verifyCode(verificationID, code))
+    .then(unsubscribe)
+    .catch(e => {
+      console.error('Unknown error verifying code:', e.message || e);
+    });
+});
+// then invoke the sign in method
+auth.signInWithPhoneNumber('+14156666666')
+  .then(user => {
+    console.log('User successfully logged in', user);
+  })
+  .catch(e => {
+    console.error('User signin error', e.message || e);
+  });
+```
+
 #### [`signInAnonymously(): Promise`](https://firebase.google.com/docs/reference/js/firebase.auth.Auth#signInAnonymously)
 
 Sign an anonymous user. If the user has already signed in, that user will be returned.
